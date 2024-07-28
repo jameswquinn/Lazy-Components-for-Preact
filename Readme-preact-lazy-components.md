@@ -1,69 +1,75 @@
-To refactor `preact-lazy-components` as an external npm package with all the discussed features, including automatic handling for the Intersection Observer polyfill and advanced features, follow these steps:
+To refactor `preact-lazy-components` as an external npm package, follow these steps to ensure it's properly set up for distribution:
 
 ### **1. Project Structure**
 
+Organize your project with a clear structure:
+
 ```
 preact-lazy-components/
-│
 ├── src/
 │   ├── components/
-│   │   ├── LazyBackground.js
 │   │   ├── LazyImage.js
-│   │   └── LazyIframe.js
-│   ├── hooks/
-│   │   ├── useIntersectionObserver.js
-│   │   └── useWebPSupport.js
+│   │   ├── LazyIframe.js
+│   │   ├── LazyBackground.js
+│   ├── styles.css
 │   ├── index.js
-│   └── styles.css
-│
 ├── dist/
-│   └── bundle.js
-│
-├── .gitignore
 ├── package.json
-├── README.md
-└── rollup.config.mjs
+├── rollup.config.js
+└── README.md
 ```
 
-### **2. Source Code**
+### **2. Component Code**
+
+Here's the refactored code for each component to be included in the npm package:
 
 #### **`src/components/LazyImage.js`**
 
-```javascript
-import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
-import useIntersectionObserver from '../hooks/useIntersectionObserver';
+```jsx
+// src/components/LazyImage.js
+import { useState, useEffect, useRef } from 'preact/hooks';
+import '../styles.css'; // Import the CSS file
 
-const LazyImage = ({ src, srcSet, sizes, alt, width, height, placeholder, className }) => {
-  const [isVisible, setIsVisible] = useState(false);
+const LazyImage = ({ src, srcSet, sizes, alt, placeholder, width, height, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const imgRef = useIntersectionObserver(
-    () => setIsVisible(true),
-    { threshold: 0.1 }
-  );
+  const [hasPlaceholderLoaded, setHasPlaceholderLoaded] = useState(false);
+  const imgRef = useRef(null);
 
   useEffect(() => {
-    if (isVisible) {
-      setIsLoaded(true);
-    }
-  }, [isVisible]);
+    const image = new Image();
+    image.src = src;
+    image.onload = () => setIsLoaded(true);
+
+    return () => {
+      image.onload = null;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    const placeholderImage = new Image();
+    placeholderImage.src = placeholder;
+    placeholderImage.onload = () => setHasPlaceholderLoaded(true);
+
+    return () => {
+      placeholderImage.onload = null;
+    };
+  }, [placeholder]);
 
   return (
-    <div className={`lazy-image-container ${className}`} style={{ position: 'relative', width, height }}>
+    <div className={`lazy-image ${className}`} style={{ width, height }}>
       <img
-        ref={imgRef}
-        src={isLoaded ? src : placeholder}
-        srcSet={isLoaded ? srcSet : ''}
+        src={src}
+        srcSet={srcSet}
         sizes={sizes}
         alt={alt}
-        width={width}
-        height={height}
-        className={`lazy-image ${isLoaded ? 'loaded' : 'loading'}`}
-        style={{ opacity: isLoaded ? 1 : 0, transition: 'opacity 0.3s' }}
+        className={`loaded ${isLoaded ? 'loaded' : ''}`}
+        ref={imgRef}
       />
-      <noscript>
-        <img src={src} srcSet={srcSet} sizes={sizes} alt={alt} width={width} height={height} />
-      </noscript>
+      <img
+        src={placeholder}
+        alt=""
+        className={`placeholder ${hasPlaceholderLoaded ? 'hidden' : ''}`}
+      />
     </div>
   );
 };
@@ -73,36 +79,27 @@ export default LazyImage;
 
 #### **`src/components/LazyIframe.js`**
 
-```javascript
-import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
-import useIntersectionObserver from '../hooks/useIntersectionObserver';
+```jsx
+// src/components/LazyIframe.js
+import { useState } from 'preact/hooks';
+import '../styles.css'; // Import the CSS file
 
 const LazyIframe = ({ src, width, height, aspectRatio, className }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const iframeRef = useIntersectionObserver(
-    () => setIsVisible(true),
-    { threshold: 0.1 }
-  );
-
-  const aspectStyle = aspectRatio ? { paddingBottom: `calc(100% / (${aspectRatio}))` } : {};
+  const [isLoaded, setIsLoaded] = useState(false);
 
   return (
-    <div
-      className={`lazy-iframe-container ${className}`}
-      style={{ position: 'relative', width, height, ...aspectStyle }}
-    >
-      {isVisible && (
-        <iframe
-          ref={iframeRef}
-          src={src}
-          width="100%"
-          height="100%"
-          frameBorder="0"
-          style={{ border: '0', display: 'block' }}
-          allowFullScreen
-        />
-      )}
+    <div className={`lazy-iframe ${className}`} style={{ width, height, position: 'relative' }}>
+      {!isLoaded && <div className="iframe-placeholder" style={{ aspectRatio }} />}
+      <iframe
+        src={src}
+        width="100%"
+        height="100%"
+        onLoad={() => setIsLoaded(true)}
+        style={{ display: isLoaded ? 'block' : 'none' }}
+        loading="lazy"
+        frameBorder="0"
+        allowFullScreen
+      />
     </div>
   );
 };
@@ -112,38 +109,33 @@ export default LazyIframe;
 
 #### **`src/components/LazyBackground.js`**
 
-```javascript
-import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
-import useIntersectionObserver from '../hooks/useIntersectionObserver';
+```jsx
+// src/components/LazyBackground.js
+import { useState } from 'preact/hooks';
+import '../styles.css'; // Import the CSS file
 
 const LazyBackground = ({ image, placeholder, className, style, children }) => {
-  const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const divRef = useIntersectionObserver(
-    () => setIsVisible(true),
-    { threshold: 0.1 }
-  );
-
-  useEffect(() => {
-    if (isVisible) {
-      setIsLoaded(true);
-    }
-  }, [isVisible]);
 
   return (
     <div
-      ref={divRef}
       className={`lazy-background ${className}`}
       style={{
         ...style,
-        backgroundImage: `url(${isLoaded ? image : placeholder})`,
+        backgroundImage: isLoaded ? `url(${image})` : `url(${placeholder})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        transition: 'background-image 0.3s',
+        filter: isLoaded ? 'none' : 'blur(10px)',
+        transition: 'filter 0.3s ease-in-out',
       }}
     >
       {children}
+      <img
+        src={image}
+        alt=""
+        style={{ display: 'none' }}
+        onLoad={() => setIsLoaded(true)}
+      />
     </div>
   );
 };
@@ -151,200 +143,169 @@ const LazyBackground = ({ image, placeholder, className, style, children }) => {
 export default LazyBackground;
 ```
 
-#### **`src/hooks/useIntersectionObserver.js`**
+### **3. CSS File**
 
-```javascript
-import { useEffect } from 'preact/hooks';
+Ensure that the CSS file is properly set up for styling:
 
-const useIntersectionObserver = (callback, options = {}) => {
-  useEffect(() => {
-    if (!('IntersectionObserver' in window)) {
-      console.warn('IntersectionObserver not supported, please use the polyfill.');
-      return;
-    }
-
-    const observer = new IntersectionObserver(callback, options);
-
-    return (node) => {
-      if (node) {
-        observer.observe(node);
-        return () => observer.unobserve(node);
-      }
-    };
-  }, [callback, options]);
-};
-
-export default useIntersectionObserver;
-```
-
-#### **`src/hooks/useWebPSupport.js`**
-
-```javascript
-import { useState, useEffect } from 'preact/hooks';
-
-const useWebPSupport = () => {
-  const [isSupported, setIsSupported] = useState(null);
-
-  useEffect(() => {
-    const checkWebPSupport = async () => {
-      const img = new Image();
-      img.onload = () => setIsSupported(img.width > 0 && img.height > 0);
-      img.onerror = () => setIsSupported(false);
-      img.src = 'data:image/webp;base64,UklGRi4AAABXRUJQVlA4IBgAAAAgAAkAAkAAEAAEAAEAAAAAAABAADCB1ICFAAA7';
-    };
-
-    checkWebPSupport();
-  }, []);
-
-  return isSupported;
-};
-
-export default useWebPSupport;
-```
-
-#### **`src/index.js`**
-
-```javascript
-import { h } from 'preact';
-import LazyImage from './components/LazyImage';
-import LazyIframe from './components/LazyIframe';
-import LazyBackground from './components/LazyBackground';
-import useIntersectionObserver from './hooks/useIntersectionObserver';
-import useWebPSupport from './hooks/useWebPSupport';
-
-// Conditionally import the Intersection Observer polyfill
-if (!('IntersectionObserver' in window)) {
-  import('intersection-observer').then(() => {
-    console.log('Intersection Observer polyfill loaded.');
-  });
-}
-
-export { LazyImage, LazyIframe, LazyBackground, useIntersectionObserver, useWebPSupport };
-```
-
-#### **`src/styles.css`**
+**`src/styles.css`**
 
 ```css
-/* Add basic styles for your components */
-.lazy-image-container {
+/* src/styles.css */
+.lazy-image {
   position: relative;
+  display: block;
   overflow: hidden;
 }
 
-.lazy-image {
+.lazy-image img {
   display: block;
   width: 100%;
   height: auto;
+  transition: opacity 0.3s ease-in-out;
 }
 
-.lazy-image.loading {
+.lazy-image .placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   filter: blur(10px);
+  transition: opacity 0.3s ease-in-out;
+  z-index: 1;
 }
 
-.lazy-image.loaded {
-  transition: opacity 0.3s ease-in;
+.lazy-image img.loaded {
   opacity: 1;
 }
 
-.lazy-background {
-  background-size: cover;
-  background-position: center;
-  transition: background-image 0.3s ease-in;
+.lazy-image .placeholder.hidden {
+  opacity: 0;
 }
 
-.lazy-iframe-container {
+.lazy-iframe {
   position: relative;
+  display: block;
+}
+
+.iframe-placeholder {
+  background: #ddd;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  filter: blur(10px);
+}
+
+.lazy-background {
+  position: relative;
+  display: block;
+  background-size: cover;
+  background-position: center;
+}
+
+.lazy-background img {
+  display: none;
 }
 ```
 
-### **3. Rollup Configuration**
+### **4. Rollup Configuration**
 
-#### **`rollup.config.mjs`**
+Set up Rollup for bundling the library:
 
-```javascript
+**`rollup.config.js`**
+
+```js
 import babel from "@rollup/plugin-babel";
-import terser from "@rollup/plugin-terser";
 import postcss from "rollup-plugin-postcss";
-import resolve from "@rollup/plugin-node-resolve";
-import commonjs from "@rollup/plugin-commonjs";
+import { terser } from "rollup-plugin-terser";
 
 export default {
-  input: "src/index.js",
+  input: 'src/index.js',
   output: {
-    file: "dist/bundle.js",
-    format: "esm",
+    file: 'dist/bundle.js',
+    format: 'esm',
+    sourcemap: true,
   },
   plugins: [
-    resolve(),
-    commonjs(),
     postcss({
       extract: true,
       minimize: true,
-      extensions: [".css"],
+      extensions: ['.css'],
     }),
     babel({
-      babelHelpers: "bundled",
-      presets: ["@babel/preset-env"],
+      babelHelpers: 'bundled',
+      presets: ['@babel/preset-env'],
       plugins: [
-        [
-          "@babel/plugin-transform-react-jsx",
-          { pragma: "h", pragmaFrag: "Fragment" },
-        ],
+        ['@babel/plugin-transform-react-jsx', { pragma: 'h', pragmaFrag: 'Fragment' }]
       ],
-      extensions: [".js", ".jsx"],
+      extensions: ['.js'],
     }),
     terser(),
   ],
 };
 ```
 
-### **4. Package Configuration**
+### **5. Package Configuration**
 
-#### **`package.json`**
+Ensure your package configuration is correct:
+
+**`package.json`**
 
 ```json
 {
   "name": "preact-lazy-components",
   "version": "1.0.0",
-  "description": "A Preact library for lazy loading images, iframes, and background images with advanced features.",
+  "description": "A lightweight library for lazy loading images, iframes, and background images with blur-up effect in Preact.",
   "main": "dist/bundle.js",
   "module": "dist/bundle.js",
+  "exports": {
+    ".": "./dist/bundle.js"
+  },
   "scripts": {
     "build": "rollup -c",
-    "start": "rollup -c -w"
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "intersection-observer": "^0.12.0"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.21.4",
-    "@babel/preset-env": "^7.21.4",
-    "@babel/plugin-transform-react-jsx": "^7.21.0",
-    "babel": "^7.21.0",
-    "rollup": "^3.5.0",
-    "rollup-plugin-postcss": "^4.0.0",
-    "rollup-plugin-terser": "^7.0.2",
-    "@rollup/plugin-babel": "^6.0.0",
-    "@rollup/plugin-commonjs": "^22.0.0",
-    "@rollup/plugin-node-resolve": "^13.0.6"
+    "preact": "^10.0.0"
   },
   "peerDependencies": {
     "preact": "^10.0.0"
   },
+  "devDependencies": {
+    "@babel/core": "^7.16.0",
+    "@babel/plugin-transform-react-jsx": "^7.16.0",
+    "@babel/preset-env": "^7.16.0",
+    "rollup": "^2.60.0",
+    "rollup-plugin-postcss": "^4.0.0",
+    "rollup-plugin-terser": "^7.0.2",
+    "@rollup/plugin-babel": "^5.3.0"
+  },
+  "keywords": [
+    "preact",
+    "lazy-load",
+    "blur-up",
+    "image",
+    "iframe",
+    "background-image"
+  ],
+  "author": "Your Name",
   "license": "MIT"
 }
 ```
 
-### **5. Documentation**
+### **6. README.md**
 
-#### **`README.md`**
+Include comprehensive usage documentation:
+
+**`README.md`**
 
 ```markdown
-# Preact Lazy Components
+# preact-lazy-components
 
-A Preact library for lazy loading images, iframes, and background images with advanced features, including support for responsive images and automatic handling of Intersection Observer polyfill.
+A lightweight library for lazy loading images, iframes, and background images with a blur-up effect in Preact.
 
 ## Installation
 
@@ -362,13 +323,13 @@ import { LazyImage } from 'preact-lazy-components';
 const App = () => (
   <div>
     <LazyImage
-      src="path/to/actual-image.jpg"
+      src="path/to/high-res-image.jpg"
       srcSet="path/to/image-small.jpg 480w, path/to/image-medium.jpg 800w, path/to/image-large.jpg 1200w"
       sizes="(max-width: 600px) 100vw, 50vw"
       alt="Description"
+      placeholder="path/to/placeholder.jpg"
       width="600"
       height="400"
-      placeholder="path/to/placeholder.jpg"
       className="custom-image"
     />
   </div>
@@ -400,7 +361,9 @@ import { LazyBackground } from 'preact-lazy-components';
 
 const App = () => (
   <div>
-    <LazyBackground
+   
+
+ <LazyBackground
       image="path/to/background-image.jpg"
       placeholder="path/to/placeholder.jpg"
       className="custom-background"
@@ -412,50 +375,17 @@ const App = () => (
 );
 ```
 
-## Hooks
-
-### useIntersectionObserver
-
-```jsx
-import { useRef } from 'preact/hooks';
-import useIntersectionObserver from 'preact-lazy-components/hooks/useIntersectionObserver';
-
-const App = () => {
-  const ref = useRef(null);
-  useIntersectionObserver(ref, () => {
-    console.log('Element is visible');
-  });
-
-  return <div ref={ref}>Observe me!</div>;
-};
-```
-
-### useWebPSupport
-
-```jsx
-import useWebPSupport from 'preact-lazy-components/hooks/useWebPSupport';
-
-const App = () => {
-  const isWebPSupported = useWebPSupport();
-
-  return (
-    <div>
-      {isWebPSupported ? 'WebP is supported!' : 'WebP is not supported.'}
-    </div>
-  );
-};
-```
-
 ## License
 
-MIT License
+MIT
 ```
 
 ### **Summary**
 
-The refactored `preact-lazy-components` library now includes:
+- **Library Features**: Implements lazy loading with blur-up effects for images, iframes, and background images.
+- **Components**: `LazyImage`, `LazyIframe`, and `LazyBackground`.
+- **CSS**: Styles are included for handling lazy loading and blur effects.
+- **Bundling**: Uses Rollup for bundling with Babel for compatibility.
+- **Documentation**: Comprehensive README with usage examples and installation instructions.
 
-- **Automatic Intersection Observer Polyfill Handling:** Ensures broader browser support.
-- **Advanced Features:** Blur-up effect, responsive image handling, WebP fallback.
-- **Optimized Performance:** Efficient for use in Preact applications.
-- **Comprehensive Documentation:** Clear usage instructions, examples, and advanced usage scenarios.
+This setup ensures that your `preact-lazy-components` library is ready for distribution as an npm package, with hooks-based implementation, CSS styling, and proper configuration for bundling and publishing.
