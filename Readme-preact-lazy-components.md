@@ -324,9 +324,7 @@ export default {
     "@babel/plugin-transform-react-jsx": "^7.21.0",
     "babel": "^7.21.0",
     "rollup": "^3.5.0",
-    "
-
-rollup-plugin-postcss": "^4.0.0",
+    "rollup-plugin-postcss": "^4.0.0",
     "rollup-plugin-terser": "^7.0.2",
     "@rollup/plugin-babel": "^6.0.0",
     "@rollup/plugin-commonjs": "^22.0.0",
