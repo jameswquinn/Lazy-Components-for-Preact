@@ -436,3 +436,270 @@ This project is licensed under the MIT License.
 ### **Summary**
 
 The final implementation provides a set of Preact components for lazy loading images, iframes, and background images with enhanced features. The package is well-structured for npm distribution and includes comprehensive documentation for users. It covers advanced image formats, lazy loading, and responsive design features while maintaining a focus on performance and ease of use.
+
+
+To provide automatic polyfills for older browsers in your custom `preact-lazy-components` package, you can integrate a polyfill library and ensure that your package dynamically includes the necessary polyfills for environments where they're required. Below are steps and code adjustments to achieve this.
+
+### 1. **Select and Include Polyfills**
+
+For `IntersectionObserver`, which is not supported in older browsers, you'll need a polyfill. For `WebP` format detection, you can use a polyfill to handle browsers that don’t support WebP.
+
+#### **Dependencies**
+
+Add the necessary polyfill libraries:
+
+```sh
+npm install intersection-observer webp-hero
+```
+
+### 2. **Update `src/index.js`**
+
+Modify the `src/index.js` to include and initialize the polyfills conditionally based on browser support.
+
+```js
+// src/index.js
+import 'intersection-observer'; // Polyfill for IntersectionObserver
+import 'webp-hero'; // Polyfill for WebP support
+
+export { default as LazyImage } from './components/LazyImage';
+export { default as LazyIframe } from './components/LazyIframe';
+export { default as LazyBackground } from './components/LazyBackground';
+```
+
+### 3. **Update `rollup.config.mjs`**
+
+Ensure that Rollup is configured to bundle these polyfills correctly.
+
+```js
+// rollup.config.mjs
+import babel from '@rollup/plugin-babel';
+import terser from '@rollup/plugin-terser';
+import postcss from 'rollup-plugin-postcss';
+
+export default {
+  input: 'src/index.js',
+  output: [
+    {
+      file: 'dist/bundle.js',
+      format: 'cjs',
+      sourcemap: true,
+    },
+    {
+      file: 'dist/bundle.esm.js',
+      format: 'esm',
+      sourcemap: true,
+    }
+  ],
+  plugins: [
+    postcss({
+      extract: true,
+      minimize: true,
+      extensions: ['.css'],
+    }),
+    babel({
+      babelHelpers: 'bundled',
+      presets: ['@babel/preset-env'],
+      plugins: [
+        [
+          '@babel/plugin-transform-react-jsx',
+          { pragma: 'h', pragmaFrag: 'Fragment' },
+        ],
+      ],
+      extensions: ['.js', '.jsx'],
+    }),
+    terser(),
+  ],
+};
+```
+
+### 4. **Update Components for Polyfills**
+
+Ensure your components handle scenarios where polyfills are active or not. The polyfills are added globally, so you don't need to modify the individual components for their inclusion.
+
+#### **Example Adjustments**
+
+- **LazyImage.js**: Ensure that the polyfill doesn’t interfere with your existing logic. The `WebP` detection and lazy loading should now work with the included polyfill.
+
+```jsx
+// src/components/LazyImage.js
+import { h } from 'preact';
+import { useState, useEffect, useRef } from 'preact/hooks';
+import './LazyImage.css';
+
+const LazyImage = ({
+  src,
+  srcSet,
+  sizes,
+  alt,
+  width,
+  height,
+  placeholder,
+  className,
+  style,
+  format = 'jpg',
+  ...rest
+}) => {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  const imgRef = useRef(null);
+
+  useEffect(() => {
+    const img = imgRef.current;
+    const onLoad = () => setLoaded(true);
+    const onError = () => setError(true);
+
+    if (img) {
+      img.addEventListener('load', onLoad);
+      img.addEventListener('error', onError);
+      return () => {
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onError);
+      };
+    }
+  }, []);
+
+  const getBestImageSrc = (src, format) => {
+    const formats = {
+      jpg: `${src}.jpg`,
+      webp: `${src}.webp`,
+      png: `${src}.png`,
+    };
+    return formats[format] || formats.jpg;
+  };
+
+  const finalSrc = getBestImageSrc(src, format);
+  const imgProps = {
+    src: finalSrc,
+    srcSet: srcSet,
+    sizes: sizes,
+    alt,
+    ref: imgRef,
+    style: { display: 'none' },
+    loading: 'lazy',
+  };
+
+  return (
+    <div
+      className={`lazy-image-wrapper ${className} ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
+      style={{ ...style, width, height }}
+      {...rest}
+    >
+      {!loaded && !error && (
+        <div className="placeholder" style={{ backgroundImage: `url(${placeholder})` }} />
+      )}
+      <img {...imgProps} />
+      {error && <div className="error-message">Failed to load image</div>}
+    </div>
+  );
+};
+
+export default LazyImage;
+```
+
+### 5. **Update Documentation**
+
+Ensure that your README includes information about polyfills and browser support.
+
+#### **README.md**
+
+```markdown
+# Preact Lazy Loading Components
+
+## Features
+
+- **LazyImage**: Lazy-load images with support for modern formats (WebP) and responsive design.
+- **LazyIframe**: Lazy-load iframes with support for aspect ratios.
+- **LazyBackground**: Lazy-load background images with support for aspect ratios.
+
+## Automatic Polyfills
+
+This package includes automatic polyfills for:
+- **IntersectionObserver**: Ensures lazy loading functionality works across all modern and older browsers.
+- **WebP**: Provides support for WebP image format in browsers that do not natively support it.
+
+## Installation
+
+To install the package, use:
+
+```sh
+npm install preact-lazy-components
+```
+
+## Usage
+
+### LazyImage
+
+```jsx
+import { LazyImage } from 'preact-lazy-components';
+
+const App = () => (
+  <div>
+    <LazyImage
+      src="https://example.com/image"
+      srcSet="https://example.com/image@2x.jpg 2x, https://example.com/image@3x.jpg 3x"
+      sizes="(max-width: 600px) 100vw, 50vw"
+      alt="Example image"
+      placeholder="https://example.com/placeholder.jpg"
+      format="webp"
+    />
+  </div>
+);
+```
+
+### LazyIframe
+
+```jsx
+import { LazyIframe } from 'preact-lazy-components';
+
+const App = () => (
+  <div>
+    <LazyIframe
+      src="https://example.com/iframe"
+      width="600"
+      height="400"
+      aspectRatio="16:9"
+    />
+  </div>
+);
+```
+
+### LazyBackground
+
+```jsx
+import { LazyBackground } from 'preact-lazy-components';
+
+const App = () => (
+  <div>
+    <LazyBackground
+      image="https://example.com/background.jpg"
+      placeholder="https://example.com/placeholder.jpg"
+      aspectRatio="16:9"
+    >
+      <p>Your content here</p>
+    </LazyBackground>
+  </div>
+);
+```
+
+## Development
+
+Build the project with:
+
+```sh
+npm run build
+```
+
+Start the development server with:
+
+```sh
+npm start
+```
+
+## License
+
+MIT License.
+```
+
+### Summary
+
+With these updates, the `preact-lazy-components` package now includes automatic polyfills for `IntersectionObserver` and WebP format detection. The documentation reflects these changes, ensuring users are aware of the polyfills and browser support provided. This approach maintains a balance between custom functionality and automatic support for legacy browsers.
